@@ -1,8 +1,51 @@
 #!/bin/sh
-dbus fire onwanstart
-sleep 0
-sh /koolshare/scripts/ss_config.sh
-/usr/bin/plugin.sh start
-robocfg vlan 51 ports "0t 1t 2t 3t 4t" vlan 85 ports "0t 1t 2t 3t 4t"
-ifconfig eth0:1 192.168.1.200 netmask 255.255.255.0
-iptables -t nat -I POSTROUTING -o eth0 -d 192.168.1.0/24 -j MASQUERADE
+/koolshare/bin/ks-wan-start.sh start
+
+sleep 1
+
+# IPTV
+
+ifconfig eth0 allmulti up
+
+#####################################################################
+vlanctl --mcast --if-create eth0 0                                  #
+vlanctl --if eth0 --rx --tags 0 --set-rxif eth0.v0 --rule-append    #
+ifconfig eth0.v0 up                                                 #
+                                                                    #
+brctl addbr br1                                                     #
+brctl addif br1 eth0.v0                                             #
+ifconfig br1 up                                                     #
+                                                                    #
+nvram set wan_ifnames=br1                                           #
+nvram set wan_ifname=br1                                            #
+nvram set wan0_ifname=br1                                           #
+#####################################################################
+
+#####################################################################
+brctl delif br0 eth1                                                #
+                                                                    #
+vlanctl --mcast --if-create eth1 0                                  #
+vlanctl --if eth1 --rx --tags 0 --set-rxif eth1.v0 --rule-append    #
+ifconfig eth1.v0 up                                                 #
+                                                                    #
+brctl addif br0 eth1.v0                                             #
+#####################################################################
+
+vlanctl --mcast --if-create eth0 85
+vlanctl --if eth0 --rx --tags 1 --filter-vid 85 0 --pop-tag --set-rxif eth0.v85 --rule-append
+vlanctl --if eth0 --rx --tags 1 --filter-vid 51 0 --pop-tag --set-rxif eth0.v85 --rule-append
+vlanctl --if eth0 --tx --tags 0 --filter-txif eth0.v85 --push-tag --set-vid 85 0 --rule-append
+ifconfig eth0.v85 up
+
+vlanctl --mcast --if-create eth1 85
+vlanctl --if eth1 --rx --tags 1 --filter-vid 85 0 --pop-tag --set-rxif eth1.v85 --rule-append
+vlanctl --if eth1 --tx --tags 0 --filter-txif eth1.v85 --push-tag --set-vid 85 0 --rule-append
+ifconfig eth1.v85 up
+
+brctl addbr vlan85
+brctl addif vlan85 eth0.v85
+brctl addif vlan85 eth1.v85
+ifconfig vlan85 up
+
+bcmmcastctl mode -i vlan85 -p 1 -m 1
+bcmmcastctl mode -i vlan85 -p 2 -m 1
